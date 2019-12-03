@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kazz187/fargate-td/internal/config"
+
 	"github.com/spf13/cobra"
 )
 
@@ -56,5 +58,10 @@ func (r *GenerateRunner) preRunE(c *cobra.Command, args []string) error {
 }
 
 func (r *GenerateRunner) runE(c *cobra.Command, args []string) error {
+	configLoader := config.NewLoader(r.Path, r.RootPath, r.Variables)
+	err := configLoader.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config files: %w", err)
+	}
 	return nil
 }
