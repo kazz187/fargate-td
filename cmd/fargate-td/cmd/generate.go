@@ -3,13 +3,18 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
-	"github.com/kazz187/fargate-td/internal/config"
-
+	"github.com/kazz187/fargate-td/internal/overlay"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func GetGenerateRunner(name string) *GenerateRunner {
+const taskPath = "tasks"
+const containerPath = "containers"
+
+func GenerateCommand(ftr *FargateTdRunner) *cobra.Command {
 	r := &GenerateRunner{
 		Variables: map[string]string{},
 	}
@@ -24,44 +29,73 @@ Run 'fargate-td generate -p PATH -t TASK -v"Key=Value"
 		PreRunE: r.preRunE,
 		RunE:    r.runE,
 	}
-	c.Flags().StringVarP(&r.Path, "path", "p", "", "generate path")
+	c.Flags().StringVarP(&r.TargetTaskPath, "path", "p", "", "generate target path")
 	_ = c.MarkFlagRequired("path")
-	c.Flags().StringVarP(&r.Task, "task", "t", "", "task name")
+	c.Flags().StringVarP(&r.TaskName, "task", "t", "", "task name")
 	_ = c.MarkFlagRequired("task")
-	c.Flags().StringVarP(&r.RootPath, "root_path", "r", "", "root path")
+	c.Flags().StringVarP(&r.ProjectRootPath, "root_path", "r", "", "project root path")
 	c.Flags().StringToStringVarP(&r.Variables, "var", "v", map[string]string{}, "variables (key1=value1,key2=value2)")
+	c.Flags().BoolVarP(&ftr.Debug, "debug", "d", false, "debug option")
 	r.Command = c
-	return r
-}
-
-func GenerateCommand(name string) *cobra.Command {
-	return GetGenerateRunner(name).Command
+	return c
 }
 
 type GenerateRunner struct {
-	Path      string
-	RootPath  string
-	Task      string
-	Variables map[string]string
-	Command   *cobra.Command
+	TargetTaskPath  string
+	ProjectRootPath string
+	TaskName        string
+	Variables       map[string]string
+	Command         *cobra.Command
 }
 
 func (r *GenerateRunner) preRunE(c *cobra.Command, args []string) error {
-	if r.RootPath == "" {
+	if r.ProjectRootPath == "" {
 		wd, err := os.Getwd()
 		if err != nil {
-			return fmt.Errorf("can't get working directory: %w", err)
+			return err
 		}
-		r.RootPath = wd
+		r.ProjectRootPath = wd
+	} else {
+		var err error
+		r.ProjectRootPath, err = filepath.Abs(r.ProjectRootPath)
+		if err != nil {
+			return err
+		}
 	}
+	// Must contain prefix "/"
+	r.TargetTaskPath = filepath.Clean("/" + r.TargetTaskPath)
+
+	if strings.Contains(r.TaskName, "/") {
+		return fmt.Errorf(`invalid task name (contains "/")`)
+	}
+
 	return nil
 }
 
 func (r *GenerateRunner) runE(c *cobra.Command, args []string) error {
-	configLoader := config.NewLoader(r.Path, r.RootPath, r.Variables)
-	err := configLoader.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config files: %w", err)
+	taskRootPath := r.ProjectRootPath + "/" + taskPath
+	loader := overlay.NewLoader(taskRootPath, r.TargetTaskPath)
+	configLoader := overlay.ConfigLoader{
+		Loader:  loader,
+		ArgVars: r.Variables,
 	}
+	conf, err := configLoader.LoadOverlayConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config files of task: %w", err)
+	}
+	task, err := loader.LoadOverlayTarget(r.TaskName, conf)
+	if err != nil {
+		return fmt.Errorf("failed to load task files %s: %w", r.TaskName, err)
+	}
+	confStr, err := conf.String()
+	if err != nil {
+		return fmt.Errorf("failed to convert yaml to string: %w", err)
+	}
+	taskStr, err := task.String()
+	if err != nil {
+		return fmt.Errorf("failed to convert yaml to string: %w", err)
+	}
+	logrus.Debugln(confStr)
+	logrus.Debugln(taskStr)
 	return nil
 }
