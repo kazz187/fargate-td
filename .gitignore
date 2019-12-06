@@ -1,4 +1,5 @@
+build/
+
 *.iml
 .idea/
 
-cmd/fargate-td/fargate-td
