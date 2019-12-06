@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -26,7 +27,7 @@ type Loader struct {
 func NewLoader(rootPath string, targetPath string) *Loader {
 	return &Loader{
 		RootPath:   rootPath,
-		TargetPath: targetPath,
+		TargetPath: filepath.Clean("/" + targetPath),
 	}
 }
 
