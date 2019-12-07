@@ -21,6 +21,7 @@ func NewFargateTdCommand() *cobra.Command {
 		PersistentPreRun: ftr.preRun,
 	}
 	root.AddCommand(GenerateCommand(&ftr))
+	root.AddCommand(VariablesCommand(&ftr))
 	return root
 }
 
