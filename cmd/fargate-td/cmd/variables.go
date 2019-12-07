@@ -70,25 +70,25 @@ func (r *VariablesRunner) preRunE(c *cobra.Command, args []string) error {
 }
 
 func (r *VariablesRunner) runE(c *cobra.Command, args []string) error {
-	conf, _ := r.LoadVariables()
-	confStr, err := conf.String()
+	vars, _ := r.LoadVariables()
+	varsStr, err := vars.String()
 	if err != nil {
 		return fmt.Errorf("failed to convert yaml to string: %w", err)
 	}
-	fmt.Print(confStr)
+	fmt.Print(varsStr)
 	return nil
 }
 
 func (r *VariablesRunner) LoadVariables() (*yaml.RNode, error) {
 	taskRootPath := r.ProjectRootPath + "/" + taskPath
 	loader := overlay.NewLoader(taskRootPath, r.TargetTaskPath)
-	configLoader := overlay.ConfigLoader{
+	variablesLoader := overlay.VariablesLoader{
 		Loader:  loader,
 		ArgVars: r.Variables,
 	}
-	conf, err := configLoader.LoadOverlayConfig()
+	vars, err := variablesLoader.LoadOverlayVariables()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config files of task: %w", err)
+		return nil, fmt.Errorf("failed to load variables files of task: %w", err)
 	}
-	return conf, nil
+	return vars, nil
 }

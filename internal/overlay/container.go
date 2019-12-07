@@ -23,18 +23,18 @@ func NewContainerLoader(rootPath string, taskVars *yaml.RNode) *ContainerLoader 
 
 func (cl *ContainerLoader) LoadContainer(name string) (*yaml.RNode, error) {
 	const containerTarget = "container"
-	const configTarget = "config"
+	const variablesTarget = "variables"
 	if c, ok := cl.containerMap[name]; ok {
 		return c, nil
 	}
 	l := NewLoader(cl.RootPath, name)
-	containerVars, err := l.LoadOverlayTarget(configTarget, nil)
+	containerVars, err := l.LoadOverlayTarget(variablesTarget, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config %s: %w", name, err)
+		return nil, fmt.Errorf("failed to load variables %s: %w", name, err)
 	}
 	tplVars, err := merge2.Merge(cl.TaskVars, containerVars)
 	if err != nil {
-		return nil, fmt.Errorf("failed to merge config %s: %w", name, err)
+		return nil, fmt.Errorf("failed to merge variables %s: %w", name, err)
 	}
 	container, err := l.LoadOverlayTarget(containerTarget, tplVars)
 	if err != nil {

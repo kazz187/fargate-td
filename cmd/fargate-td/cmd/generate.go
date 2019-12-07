@@ -55,19 +55,19 @@ func (r *GenerateRunner) preRunE(c *cobra.Command, args []string) error {
 }
 
 func (r *GenerateRunner) runE(c *cobra.Command, args []string) error {
-	conf, err := r.VariablesRunner.LoadVariables()
+	vars, err := r.VariablesRunner.LoadVariables()
 	if err != nil {
 		return err
 	}
 
 	taskRootPath := r.ProjectRootPath + "/" + taskPath
 	loader := overlay.NewLoader(taskRootPath, r.TargetTaskPath)
-	task, err := loader.LoadOverlayTarget(r.TaskName, conf)
+	task, err := loader.LoadOverlayTarget(r.TaskName, vars)
 	if err != nil {
 		return fmt.Errorf("failed to load task files %s: %w", r.TaskName, err)
 	}
 	containerRootPath := r.ProjectRootPath + "/" + containerPath
-	cl := overlay.NewContainerLoader(containerRootPath, conf)
+	cl := overlay.NewContainerLoader(containerRootPath, vars)
 	if task == nil || task.YNode().Kind != yaml.MappingNode {
 		return errors.New("task is not map")
 	}
@@ -90,7 +90,7 @@ func (r *GenerateRunner) runE(c *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
-	confStr, err := conf.String()
+	varsStr, err := vars.String()
 	if err != nil {
 		return fmt.Errorf("failed to convert yaml to string: %w", err)
 	}
@@ -98,7 +98,7 @@ func (r *GenerateRunner) runE(c *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to convert yaml to string: %w", err)
 	}
-	logrus.Debugln("generated variables:", confStr)
+	logrus.Debugln("generated variables:", varsStr)
 	fmt.Print(taskStr)
 	return nil
 }
