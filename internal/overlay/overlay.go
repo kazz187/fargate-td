@@ -48,7 +48,7 @@ func mergeTargetFiles(targetFiles []string, tplVars *yaml.RNode) (*yaml.RNode, e
 	for _, f := range targetFiles {
 		var b []byte
 		if strings.HasSuffix(f, tplSuffix) {
-			tpl, err := template.ParseFiles(f)
+			tpl, err := template.New(filepath.Base(f)).Option("missingkey=error").ParseFiles(f)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse template %s: %w", f, err)
 			}

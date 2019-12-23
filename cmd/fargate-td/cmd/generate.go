@@ -30,12 +30,15 @@ Run 'fargate-td generate -p PATH -t TASK -v"Key=Value"
 		PreRunE: r.preRunE,
 		RunE:    r.runE,
 	}
-	c.Flags().StringVarP(&r.TaskName, "task", "t", "", "task name")
-	_ = c.MarkFlagRequired("task")
-
-	VariablesSetOptions(c, ftr, &r.VariablesRunner)
+	SetGenerateOptions(c, ftr, r)
 	r.Command = c
 	return c
+}
+
+func SetGenerateOptions(c *cobra.Command, ftr *FargateTdRunner, r *GenerateRunner) {
+	SetVariablesOptions(c, ftr, &r.VariablesRunner)
+	c.Flags().StringVarP(&r.TaskName, "task", "t", "", "task name")
+	_ = c.MarkFlagRequired("task")
 }
 
 type GenerateRunner struct {
@@ -74,7 +77,7 @@ func (r *GenerateRunner) GenerateTaskDefinition() (string, error) {
 	loader := overlay.NewLoader(taskRootPath, r.TargetTaskPath)
 	task, err := loader.LoadOverlayTarget(r.TaskName, vars)
 	if err != nil {
-		return "", fmt.Errorf("failed to load task files %s: %w", r.TaskName, err)
+		return "", fmt.Errorf("failed to load task file %s: %w", r.TaskName, err)
 	}
 
 	// Create container loader
@@ -84,17 +87,22 @@ func (r *GenerateRunner) GenerateTaskDefinition() (string, error) {
 		return "", errors.New("task is not map")
 	}
 	// Load list of containers
-	cd := task.Field("containerDefinitions")
-	if cd.Value == nil || cd.Value.YNode().Kind != yaml.SequenceNode {
+	cd := task.Field("ContainerDefinitions")
+	if cd == nil || cd.Value == nil {
+		return "", errors.New("containerDefinition is not found")
+	}
+	if cd.Value.YNode().Kind != yaml.SequenceNode {
 		return "", errors.New("containerDefinition is not list")
 	}
 	err = cd.Value.VisitElements(func(conDef *yaml.RNode) error {
 		if conDef == nil || conDef.YNode().Kind != yaml.MappingNode {
 			return nil
 		}
+		// Load container variables
+		conVars := conDef.Field("variables").Value
 		// Load container template, if template field is defined
 		conName := conDef.Field("template").Value.YNode().Value
-		con, err := cl.LoadContainer(conName)
+		con, err := cl.LoadContainer(conName, conVars)
 		if err != nil {
 			return fmt.Errorf("failed to load container definition: %w", err)
 		}

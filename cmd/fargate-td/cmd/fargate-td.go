@@ -15,13 +15,14 @@ func NewFargateTdCommand() *cobra.Command {
 	ftr := FargateTdRunner{}
 	root := &cobra.Command{
 		Use:              "fargate-td",
-		Short:            "Generate task definition",
-		Long:             "Generate task definition",
-		Version:          "v0.0.1",
+		Short:            "Manage task definition",
+		Long:             "Manage task definition",
+		Version:          "v0.0.4",
 		PersistentPreRun: ftr.preRun,
 	}
-	root.AddCommand(GenerateCommand(&ftr))
 	root.AddCommand(VariablesCommand(&ftr))
+	root.AddCommand(GenerateCommand(&ftr))
+	root.AddCommand(DeployCommand(&ftr))
 	return root
 }
 

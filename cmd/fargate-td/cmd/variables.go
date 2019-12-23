@@ -25,11 +25,11 @@ Run 'fargate-td variables -p PATH -v"Key=Value"
 		RunE:    r.runE,
 	}
 	r.Command = c
-	VariablesSetOptions(c, ftr, r)
+	SetVariablesOptions(c, ftr, r)
 	return c
 }
 
-func VariablesSetOptions(c *cobra.Command, ftr *FargateTdRunner, r *VariablesRunner) {
+func SetVariablesOptions(c *cobra.Command, ftr *FargateTdRunner, r *VariablesRunner) {
 	c.Flags().StringVarP(&r.TargetTaskPath, "path", "p", "", "generate target path")
 	_ = c.MarkFlagRequired("path")
 	c.Flags().StringVarP(&r.ProjectRootPath, "root_path", "r", "", "project root path")
