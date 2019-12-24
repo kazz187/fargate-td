@@ -2,7 +2,7 @@ version: 2
 jobs:
   release:
     docker:
-      - image: circleci/golang:1.13.5-stretch
+      - image: circleci/golang:1.13.5-buster
     working_directory: /go/src/github.com/kazz187/fargate-td
     steps:
       - checkout
