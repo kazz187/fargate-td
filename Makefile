@@ -10,7 +10,7 @@ GOX_OUTPUT="${BUILD_DIR}/bin/${NAME}_{{.OS}}_{{.Arch}}/{{.Dir}}"
 cross-build:
 	go get github.com/mitchellh/gox
 	go get github.com/pwaller/goupx
-	gox -osarch="${TARGET_ARCHS}" -ldflags='-s -w -extldflags "-static"' -output=${GOX_OUTPUT} ./cmd/${NAME}
+	CGO_ENABLED=0 gox -osarch="${TARGET_ARCHS}" -ldflags='-s -w -extldflags "-static"' -output=${GOX_OUTPUT} ./cmd/${NAME}
 	strip ${BUILD_DIR}/bin/${NAME}_linux_amd64/${NAME}
 	goupx ${BUILD_DIR}/bin/${NAME}_linux_amd64/${NAME}
 
