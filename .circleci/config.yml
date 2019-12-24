@@ -6,6 +6,7 @@ jobs:
     working_directory: /go/src/github.com/kazz187/fargate-td
     steps:
       - checkout
+      - run: sudo apt-get install upx-ucl
       - run: TAG=${CIRCLE_TAG} make release
 workflows:
   version: 2

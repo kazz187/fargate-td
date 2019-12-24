@@ -6,6 +6,8 @@ require (
 	github.com/aws/aws-sdk-go-v2 v0.18.0
 	github.com/google/go-cmp v0.3.1
 	github.com/logrusorgru/aurora v0.0.0-20191116043053-66b7ad493a23
+	github.com/mitchellh/gox v1.0.1 // indirect
+	github.com/pwaller/goupx v0.0.0-20160623083017-1d58e01d5ce2 // indirect
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.5
 	gopkg.in/yaml.v3 v3.0.0-20191026110619-0b21df46bc1d

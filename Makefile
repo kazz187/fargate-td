@@ -9,7 +9,10 @@ GOX_OUTPUT="${BUILD_DIR}/bin/${NAME}_{{.OS}}_{{.Arch}}/{{.Dir}}"
 .PHONY: cross-build
 cross-build:
 	go get github.com/mitchellh/gox
-	gox -osarch="${TARGET_ARCHS}" -output=${GOX_OUTPUT} ./cmd/${NAME}
+	go get github.com/pwaller/goupx
+	gox -osarch="${TARGET_ARCHS}" -ldflags='-s -w -extldflags "-static"' -output=${GOX_OUTPUT} ./cmd/${NAME}
+	strip ${BUILD_DIR}/bin/${NAME}_linux_amd64/${NAME}
+	goupx ${BUILD_DIR}/bin/${NAME}_linux_amd64/${NAME}
 
 ${BUILD_DIR}/pkg/%.zip: cross-build
 	mkdir -p ${BUILD_DIR}/pkg
