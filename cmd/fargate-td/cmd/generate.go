@@ -87,9 +87,9 @@ func (r *GenerateRunner) GenerateTaskDefinition() (string, error) {
 		return "", errors.New("task is not map")
 	}
 	// Load list of containers
-	cd := task.Field("ContainerDefinitions")
+	cd := task.Field("containerDefinitions")
 	if cd == nil || cd.Value == nil {
-		return "", errors.New("containerDefinition is not found")
+		return "", errors.New("containerDefinitions is not found")
 	}
 	if cd.Value.YNode().Kind != yaml.SequenceNode {
 		return "", errors.New("containerDefinition is not list")
