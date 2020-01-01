@@ -53,6 +53,7 @@ func (r *DeployRunner) preRunE(c *cobra.Command, args []string) error {
 }
 
 func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
+	// Load deploy config
 	deployConf := config.NewDeployConfig()
 	searchDeployConfPath := filepath.Clean(
 		strings.Join(
@@ -69,10 +70,14 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 		return err
 	}
 	taskConfList := deployConf.GetTaskConfig(r.TaskName)
+
+	// Generate task definition
 	taskStr, err := r.GenerateRunner.GenerateTaskDefinition()
 	if err != nil {
 		return err
 	}
+
+	// Replace keys of task yaml to lowercase
 	taskYaml := map[string]interface{}{}
 	err = yaml.Unmarshal([]byte(taskStr), &taskYaml)
 	if err != nil {
@@ -83,6 +88,8 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal task yaml")
 	}
+
+	// Load to struct RegisterTaskDefinitionInput
 	in := &ecs.RegisterTaskDefinitionInput{}
 	err = yaml.Unmarshal(inStr, in)
 	if err != nil {
@@ -92,17 +99,19 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load aws config: %w", err)
 	}
+
+	//
 	svc := ecs.New(cfg)
 	tdRes, err := svc.RegisterTaskDefinitionRequest(in).Send(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to register task definition: %w", err)
 	}
-	err = diffTaskDefinition(svc, taskConfList, tdRes.TaskDefinition)
+	diffMap, err := diffTaskDefinition(svc, taskConfList, tdRes.TaskDefinition)
 	if err != nil {
 		return fmt.Errorf("failed to ")
 	}
-	if r.TdOnly {
-		err := updateService(svc, taskConfList, *tdRes.TaskDefinition.TaskDefinitionArn)
+	if !r.TdOnly {
+		err := updateService(svc, taskConfList, diffMap, *tdRes.TaskDefinition.TaskDefinitionArn)
 		if err != nil {
 			return err
 		}
@@ -110,8 +119,8 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	return nil
 }
 
-func diffTaskDefinition(svc *ecs.Client, taskConfList []config.TaskConfig, newTd *ecs.TaskDefinition) error {
-
+func diffTaskDefinition(svc *ecs.Client, taskConfList []config.TaskConfig, newTd *ecs.TaskDefinition) (map[string]string, error) {
+	diffMap := map[string]string{}
 	clusters := map[string][]string{}
 	for _, taskConf := range taskConfList {
 		c, ok := clusters[taskConf.Cluster]
@@ -128,10 +137,10 @@ func diffTaskDefinition(svc *ecs.Client, taskConfList []config.TaskConfig, newTd
 			Services: services,
 		}).Send(context.Background())
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if svcRes == nil {
-			return fmt.Errorf("service is not found in cluster %s", cluster)
+			return nil, fmt.Errorf("service is not found in cluster %s", cluster)
 		}
 		svcToTd := map[string]string{}
 		for _, s := range svcRes.Services {
@@ -139,22 +148,23 @@ func diffTaskDefinition(svc *ecs.Client, taskConfList []config.TaskConfig, newTd
 		}
 
 		for _, s := range services {
-			fmt.Printf("Deploy to [cluster: %s, service: %s]\n", cluster, s)
+			fmt.Printf("Diff [cluster: %s, service: %s]\n", cluster, s)
 			td, ok := svcToTd[s]
 			if !ok {
-				return fmt.Errorf("service %s is not found in cluster %s", s, cluster)
+				return nil, fmt.Errorf("service %s is not found in cluster %s", s, cluster)
 			}
 			currentTdRes, err := svc.DescribeTaskDefinitionRequest(&ecs.DescribeTaskDefinitionInput{
 				TaskDefinition: &td,
 			}).Send(context.Background())
 			if err != nil {
-				return fmt.Errorf("failed to get current task definition: %w", err)
+				return nil, fmt.Errorf("failed to get current task definition: %w", err)
 			}
 			currentTdRes.TaskDefinition.Revision = newTd.Revision
 			currentTdRes.TaskDefinition.TaskDefinitionArn = newTd.TaskDefinitionArn
 			diff := cmp.Diff(currentTdRes.TaskDefinition, newTd)
+			diffMap[s] = diff
 			if diff == "" {
-				fmt.Println("already up-to-date")
+				fmt.Println("Already up-to-date")
 			} else {
 				fmt.Println("```")
 				displayColorDiff(diff)
@@ -162,12 +172,17 @@ func diffTaskDefinition(svc *ecs.Client, taskConfList []config.TaskConfig, newTd
 			}
 		}
 	}
-	return nil
+	return diffMap, nil
 }
 
-func updateService(svc *ecs.Client, taskConfList []config.TaskConfig, tdArn string) error {
+func updateService(svc *ecs.Client, taskConfList []config.TaskConfig, diffMap map[string]string, tdArn string) error {
 	var failedServiceList []string
 	for _, taskConf := range taskConfList {
+		if diffMap[taskConf.Service] == "" {
+			fmt.Printf("Skip update service [cluster: %s, service: %s]\n", taskConf.Cluster, taskConf.Service)
+			continue
+		}
+		fmt.Printf("Update service [cluster: %s, service: %s]\n", taskConf.Cluster, taskConf.Service)
 		serviceInput := &ecs.UpdateServiceInput{
 			Cluster:        &taskConf.Cluster,
 			Service:        &taskConf.Service,
