@@ -99,7 +99,10 @@ func (r *GenerateRunner) GenerateTaskDefinition() (string, error) {
 			return nil
 		}
 		// Load container variables
-		conVars := conDef.Field("variables").Value
+		var conVars *yaml.RNode
+		if conDef.Field("variables") != nil {
+			conVars = conDef.Field("variables").Value
+		}
 		// Load container template, if template field is defined
 		conName := conDef.Field("template").Value.YNode().Value
 		con, err := cl.LoadContainer(conName, conVars)
