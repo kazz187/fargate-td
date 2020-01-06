@@ -34,7 +34,7 @@ Run 'fargate-td deploy -p PATH -t TASK -v"Key=Value -n TASK_DEFINITION_NAME"
 		RunE:    r.runE,
 	}
 	SetGenerateOptions(c, ftr, &r.GenerateRunner)
-	c.Flags().Bool("td-only", false, "deploy task definition only")
+	c.Flags().BoolVar(&r.TdOnly, "td-only", false, "deploy task definition only")
 	r.Command = c
 	return c
 }
@@ -108,7 +108,7 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	}
 	diffMap, err := diffTaskDefinition(svc, taskConfList, tdRes.TaskDefinition)
 	if err != nil {
-		return fmt.Errorf("failed to ")
+		return fmt.Errorf("failed to compare task definitions: %w", err)
 	}
 	if !r.TdOnly {
 		err := updateService(svc, taskConfList, diffMap, *tdRes.TaskDefinition.TaskDefinitionArn)
