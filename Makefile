@@ -34,7 +34,7 @@ homebrew-release: package
 	pushd ${BUILD_DIR}/brew
 	git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/kazz187/homebrew-fargate-td
 	pushd homebrew-fargate-td
-	./update.sh ${TAG/v/} ${SHA256}
+	./update.sh ${TAG} ${SHA256}
 	git commit -a -m"Update fargate-td ${TAG}"
 	git push master
 	popd
