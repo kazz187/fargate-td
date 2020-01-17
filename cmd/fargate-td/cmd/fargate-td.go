@@ -17,7 +17,7 @@ func NewFargateTdCommand() *cobra.Command {
 		Use:              "fargate-td",
 		Short:            "Manage task definition",
 		Long:             "Manage task definition",
-		Version:          "v0.0.8",
+		Version:          "VERSION",
 		PersistentPreRun: ftr.preRun,
 	}
 	root.AddCommand(VariablesCommand(&ftr))
