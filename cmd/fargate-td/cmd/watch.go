@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -48,6 +49,21 @@ type WatchRunner struct {
 }
 
 func (r *WatchRunner) preRunE(c *cobra.Command, args []string) error {
+	if r.ProjectRootPath == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		r.ProjectRootPath = wd
+	} else {
+		var err error
+		r.ProjectRootPath, err = filepath.Abs(r.ProjectRootPath)
+		if err != nil {
+			return err
+		}
+	}
+	// Must contain prefix "/"
+	r.TargetTaskPath = filepath.Clean("/" + r.TargetTaskPath)
 	if strings.Contains(r.TaskName, "/") {
 		return fmt.Errorf(`invalid task name (contains "/")`)
 	}
