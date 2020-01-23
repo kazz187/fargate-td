@@ -23,6 +23,7 @@ func NewFargateTdCommand() *cobra.Command {
 	root.AddCommand(VariablesCommand(&ftr))
 	root.AddCommand(GenerateCommand(&ftr))
 	root.AddCommand(DeployCommand(&ftr))
+	root.AddCommand(WatchCommand(&ftr))
 	return root
 }
 
