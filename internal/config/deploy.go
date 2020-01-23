@@ -79,6 +79,20 @@ func searchConfigFile(searchPath string) (string, error) {
 	return "", fmt.Errorf("deploy config file is not found in %s", filepath.Clean(searchPath))
 }
 
-func (dc *DeployConfig) GetTaskConfig(task string) []TaskConfig {
+func (dc *DeployConfig) GetTaskConfigs(task string) []TaskConfig {
 	return dc.taskConfigs[task]
+}
+
+func (dc *DeployConfig) GetServicesMapGroupByCluster(task string) map[string][]string {
+	taskConfList := dc.taskConfigs[task]
+	clusters := map[string][]string{}
+	for _, taskConf := range taskConfList {
+		c, ok := clusters[taskConf.Cluster]
+		if ok {
+			clusters[taskConf.Cluster] = append(c, taskConf.Service)
+		} else {
+			clusters[taskConf.Cluster] = []string{taskConf.Service}
+		}
+	}
+	return clusters
 }

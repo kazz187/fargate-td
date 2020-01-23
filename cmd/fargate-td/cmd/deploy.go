@@ -69,7 +69,8 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	taskConfList := deployConf.GetTaskConfig(r.TaskName)
+	taskConfList := deployConf.GetTaskConfigs(r.TaskName)
+	servicesMap := deployConf.GetServicesMapGroupByCluster(r.TaskName)
 
 	// Generate task definition
 	taskStr, err := r.GenerateRunner.GenerateTaskDefinition()
@@ -106,7 +107,7 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to register task definition: %w", err)
 	}
-	diffMap, err := diffTaskDefinition(svc, taskConfList, tdRes.TaskDefinition)
+	diffMap, err := diffTaskDefinition(svc, servicesMap, tdRes.TaskDefinition)
 	if err != nil {
 		return fmt.Errorf("failed to compare task definitions: %w", err)
 	}
@@ -119,19 +120,10 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	return nil
 }
 
-func diffTaskDefinition(svc *ecs.Client, taskConfList []config.TaskConfig, newTd *ecs.TaskDefinition) (map[string]string, error) {
+func diffTaskDefinition(svc *ecs.Client, servicesMap map[string][]string, newTd *ecs.TaskDefinition) (map[string]string, error) {
 	diffMap := map[string]string{}
-	clusters := map[string][]string{}
-	for _, taskConf := range taskConfList {
-		c, ok := clusters[taskConf.Cluster]
-		if ok {
-			clusters[taskConf.Cluster] = append(c, taskConf.Service)
-		} else {
-			clusters[taskConf.Cluster] = []string{taskConf.Service}
-		}
-	}
 
-	for cluster, services := range clusters {
+	for cluster, services := range servicesMap {
 		svcRes, err := svc.DescribeServicesRequest(&ecs.DescribeServicesInput{
 			Cluster:  &cluster,
 			Services: services,

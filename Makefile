@@ -8,7 +8,7 @@ GOX_OUTPUT="${BUILD_DIR}/bin/${NAME}_{{.OS}}_{{.Arch}}/{{.Dir}}"
 
 .PHONY: cross-build
 cross-build:
-	sed -i "s/VERSION/${TAG}/" cmd/fargate-td/cmd/fargate-td.go
+	[ -z "${TAG}" ] || sed -i "s/VERSION/${TAG}/" cmd/fargate-td/cmd/fargate-td.go
 	go get github.com/mitchellh/gox
 	go get github.com/pwaller/goupx
 	CGO_ENABLED=0 gox -osarch="${TARGET_ARCHS}" -ldflags='-s -w -extldflags "-static"' -output=${GOX_OUTPUT} ./cmd/${NAME}
