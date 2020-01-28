@@ -101,13 +101,13 @@ func (r *WatchRunner) Watch(cluster string, services []string) {
 	go w.Start()
 	for result := range w.Results {
 		switch result.Status {
-		case watch.DEPLOYED:
+		case watch.Deployed:
 			fmt.Printf("Deployed [cluster: %s, service: %s]\n", result.Cluster, result.Service)
-		case watch.DEPLOY_FAILED:
+		case watch.DeployFailed:
 			fmt.Printf("Failed to deploy [cluster: %s, service: %s]: %s\n", result.Cluster, result.Service, result.Error.Error())
-		case watch.ERROR:
+		case watch.Error:
 			fmt.Printf("Error [cluster: %s, service: %s]: %s\n", result.Cluster, result.Service, result.Error.Error())
-		case watch.TIMEOUT:
+		case watch.Timeout:
 			fmt.Printf("Timeout [cluster: %s, service: %s]\n", result.Cluster, result.Service)
 		}
 	}

@@ -16,11 +16,11 @@ import (
 )
 
 const (
-	DEPLOYING = iota
-	DEPLOYED
-	DEPLOY_FAILED
-	ERROR
-	TIMEOUT
+	Deploying = iota
+	Deployed
+	DeployFailed
+	Error
+	Timeout
 )
 
 const statusRunning = "RUNNING"
@@ -64,7 +64,7 @@ func (w *Watch) Start() {
 	cfg, err := external.LoadDefaultAWSConfig()
 	if err != nil {
 		w.Results <- Result{
-			Status: ERROR,
+			Status: Error,
 			Error:  fmt.Errorf("failed to load aws config: %w", err),
 		}
 		close(w.Results)
@@ -80,7 +80,7 @@ func (w *Watch) Start() {
 	descServices, err := ecsService.DescribeServicesRequest(descServicesIn).Send(context.Background())
 	if err != nil {
 		w.Results <- Result{
-			Status: ERROR,
+			Status: Error,
 			Error:  fmt.Errorf("failed to describe services: %w", err),
 		}
 		close(w.Results)
@@ -106,7 +106,7 @@ func (w *Watch) check(ecsService *ecs.Client, service ecs.Service) Result {
 		return Result{
 			Cluster: w.Cluster,
 			Service: *service.ServiceName,
-			Status:  ERROR,
+			Status:  Error,
 			Error:   err,
 		}
 	}
@@ -120,7 +120,7 @@ func (w *Watch) check(ecsService *ecs.Client, service ecs.Service) Result {
 		return Result{
 			Cluster: w.Cluster,
 			Service: *service.ServiceName,
-			Status:  ERROR,
+			Status:  Error,
 			Error:   err,
 		}
 	}
@@ -137,7 +137,7 @@ func (w *Watch) check(ecsService *ecs.Client, service ecs.Service) Result {
 			return Result{
 				Cluster: w.Cluster,
 				Service: *service.ServiceName,
-				Status:  DEPLOY_FAILED,
+				Status:  DeployFailed,
 				Error:   errors.New("task status is " + *task.LastStatus),
 			}
 		}
@@ -145,7 +145,7 @@ func (w *Watch) check(ecsService *ecs.Client, service ecs.Service) Result {
 			return Result{
 				Cluster: w.Cluster,
 				Service: *service.ServiceName,
-				Status:  DEPLOYING,
+				Status:  Deploying,
 				Error:   nil,
 			}
 		}
@@ -155,14 +155,14 @@ func (w *Watch) check(ecsService *ecs.Client, service ecs.Service) Result {
 		return Result{
 			Cluster: w.Cluster,
 			Service: *service.ServiceName,
-			Status:  DEPLOYING,
+			Status:  Deploying,
 			Error:   nil,
 		}
 	}
 	return Result{
 		Cluster: w.Cluster,
 		Service: *service.ServiceName,
-		Status:  DEPLOYED,
+		Status:  Deployed,
 		Error:   nil,
 	}
 
@@ -181,10 +181,10 @@ CHECK:
 	result := w.check(ecsService, service)
 
 	switch result.Status {
-	case DEPLOYED, DEPLOY_FAILED, ERROR:
+	case Deployed, DeployFailed, Error:
 		w.Results <- result
 		return
-	case DEPLOYING:
+	case Deploying:
 		// noop
 	}
 
@@ -196,7 +196,7 @@ CHECK:
 		w.Results <- Result{
 			Cluster: w.Cluster,
 			Service: *service.ServiceName,
-			Status:  TIMEOUT,
+			Status:  Timeout,
 			Error:   nil,
 		}
 		return
