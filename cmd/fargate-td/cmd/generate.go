@@ -104,7 +104,11 @@ func (r *GenerateRunner) GenerateTaskDefinition() (string, error) {
 			conVars = conDef.Field("variables").Value
 		}
 		// Load container template, if template field is defined
-		conName := conDef.Field("template").Value.YNode().Value
+		template := conDef.Field("template")
+		if template == nil {
+			return nil
+		}
+		conName := template.Value.YNode().Value
 		con, err := cl.LoadContainer(conName, conVars)
 		if err != nil {
 			return fmt.Errorf("failed to load container definition: %w", err)
