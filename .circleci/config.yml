@@ -2,7 +2,7 @@ version: 2
 jobs:
   release:
     docker:
-      - image: circleci/golang:1.18.3-buster
+      - image: cimg/go:1.18.3
     working_directory: /go/src/github.com/kazz187/fargate-td
     steps:
       - checkout
