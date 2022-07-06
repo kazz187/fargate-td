@@ -2,13 +2,12 @@ version: 2
 jobs:
   release:
     docker:
-      - image: circleci/golang:1.13.5-buster
+      - image: circleci/golang:1.18.3-buster
     working_directory: /go/src/github.com/kazz187/fargate-td
     steps:
       - checkout
-      - run: sudo apt-get install upx-ucl
       - run: TAG=${CIRCLE_TAG} make release
-      - run: TAG=${CIRCLE_TAG} SHA256=$(cat "build/pkg/fargate-td_darwin_amd64.zip" | sha256sum | awk '{print $1;}') make homebrew-release
+      - run: TAG=${CIRCLE_TAG} SHA256=$(cat "build/pkg/fargate-td_darwin_amd64.zip" | sha256sum | awk '{print $1;}') SHA256ARM=$(cat "build/pkg/fargate-td_darwin_arm64.zip" | sha256sum | awk '{print $1;}') make homebrew-release
 workflows:
   version: 2
   release:
