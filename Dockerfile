@@ -1,4 +1,4 @@
-FROM       golang:1.13.5 AS build-env
+FROM       golang:1.18.3 AS build-env
 ENV        WORKDIR_PATH /go/src/github.com/kazz187/fargate-td
 ADD        . ${WORKDIR_PATH}
 WORKDIR    ${WORKDIR_PATH}/cmd/fargate-td

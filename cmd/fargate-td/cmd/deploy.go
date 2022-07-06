@@ -182,7 +182,7 @@ func updateService(svc *ecs.Client, taskConfList []config.TaskConfig, diffMap ma
 		}
 		_, err := svc.UpdateServiceRequest(serviceInput).Send(context.Background())
 		if err != nil {
-			logrus.Errorf("failed to update service: %w", err)
+			logrus.Errorf("failed to update service: %s", err)
 			failedServiceList = append(failedServiceList, "[cluster: "+taskConf.Cluster+", service: "+taskConf.Service+"]")
 		}
 	}
