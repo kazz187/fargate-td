@@ -3,7 +3,7 @@ jobs:
   release:
     docker:
       - image: cimg/go:1.18.3
-    working_directory: /go/src/github.com/kazz187/fargate-td
+    working_directory: ~/go/src/github.com/kazz187/fargate-td
     steps:
       - checkout
       - run: TAG=${CIRCLE_TAG} make release
