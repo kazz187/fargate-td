@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kazz187/fargate-td/internal/util"
-
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/sirupsen/logrus"
 
-	"github.com/aws/aws-sdk-go-v2/aws/external"
-	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/kazz187/fargate-td/internal/util"
 )
 
 const (
@@ -61,7 +61,8 @@ func NewWatch(cluster string, services []string, interval, timeout time.Duration
 }
 
 func (w *Watch) Start() {
-	cfg, err := external.LoadDefaultAWSConfig()
+	ctx := context.Background()
+	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		w.Results <- Result{
 			Status: Error,
@@ -71,13 +72,13 @@ func (w *Watch) Start() {
 		return
 	}
 
-	ecsService := ecs.New(cfg)
+	ecsService := ecs.NewFromConfig(cfg)
 	descServicesIn := &ecs.DescribeServicesInput{
 		Cluster:  &w.Cluster,
 		Include:  nil,
 		Services: w.Services,
 	}
-	descServices, err := ecsService.DescribeServicesRequest(descServicesIn).Send(context.Background())
+	descServices, err := ecsService.DescribeServices(ctx, descServicesIn)
 	if err != nil {
 		w.Results <- Result{
 			Status: Error,
@@ -90,18 +91,18 @@ func (w *Watch) Start() {
 	wg := sync.WaitGroup{}
 	for _, service := range descServices.Services {
 		wg.Add(1)
-		go w.ticker(&wg, service, ecsService)
+		go w.ticker(ctx, &wg, service, ecsService)
 	}
 	wg.Wait()
 	close(w.Results)
 }
 
-func (w *Watch) check(ecsService *ecs.Client, service ecs.Service) Result {
+func (w *Watch) check(ctx context.Context, ecsService *ecs.Client, service types.Service) Result {
 	listTasksIn := &ecs.ListTasksInput{
 		Cluster:     service.ClusterArn,
 		ServiceName: service.ServiceName,
 	}
-	listTasks, err := ecsService.ListTasksRequest(listTasksIn).Send(context.Background())
+	listTasks, err := ecsService.ListTasks(ctx, listTasksIn)
 	if err != nil {
 		return Result{
 			Cluster: w.Cluster,
@@ -115,7 +116,7 @@ func (w *Watch) check(ecsService *ecs.Client, service ecs.Service) Result {
 		Cluster: service.ClusterArn,
 		Tasks:   listTasks.TaskArns,
 	}
-	tasks, err := ecsService.DescribeTasksRequest(descTasksIn).Send(context.Background())
+	tasks, err := ecsService.DescribeTasks(ctx, descTasksIn)
 	if err != nil {
 		return Result{
 			Cluster: w.Cluster,
@@ -151,7 +152,7 @@ func (w *Watch) check(ecsService *ecs.Client, service ecs.Service) Result {
 		}
 		runningCount++
 	}
-	if runningCount != *service.DesiredCount {
+	if int32(runningCount) != service.DesiredCount {
 		return Result{
 			Cluster: w.Cluster,
 			Service: *service.ServiceName,
@@ -168,7 +169,7 @@ func (w *Watch) check(ecsService *ecs.Client, service ecs.Service) Result {
 
 }
 
-func (w *Watch) ticker(wg *sync.WaitGroup, service ecs.Service, ecsService *ecs.Client) {
+func (w *Watch) ticker(ctx context.Context, wg *sync.WaitGroup, service types.Service, ecsService *ecs.Client) {
 	defer wg.Done()
 	ticker := time.NewTicker(w.Interval)
 	timer := time.NewTimer(w.Timeout)
@@ -178,7 +179,7 @@ func (w *Watch) ticker(wg *sync.WaitGroup, service ecs.Service, ecsService *ecs.
 	}()
 
 CHECK:
-	result := w.check(ecsService, service)
+	result := w.check(ctx, ecsService, service)
 
 	switch result.Status {
 	case Deployed, DeployFailed, Error:

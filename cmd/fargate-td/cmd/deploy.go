@@ -6,14 +6,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws/external"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/smithy-go/document"
 	"github.com/google/go-cmp/cmp"
-	"github.com/kazz187/fargate-td/internal/config"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+
+	"github.com/kazz187/fargate-td/internal/config"
 )
 
 func DeployCommand(ftr *FargateTdRunner) *cobra.Command {
@@ -53,6 +57,7 @@ func (r *DeployRunner) preRunE(c *cobra.Command, args []string) error {
 }
 
 func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
+	ctx := context.Background()
 	// Load deploy config
 	deployConf := config.NewDeployConfig()
 	searchDeployConfPath := filepath.Clean(
@@ -96,23 +101,23 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load task definition yaml file: %w", err)
 	}
-	cfg, err := external.LoadDefaultAWSConfig()
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load aws config: %w", err)
 	}
 
 	//
-	svc := ecs.New(cfg)
-	tdRes, err := svc.RegisterTaskDefinitionRequest(in).Send(context.Background())
+	svc := ecs.NewFromConfig(cfg)
+	tdRes, err := svc.RegisterTaskDefinition(ctx, in)
 	if err != nil {
 		return fmt.Errorf("failed to register task definition: %w", err)
 	}
-	diffMap, err := diffTaskDefinition(svc, servicesMap, tdRes.TaskDefinition)
+	diffMap, err := diffTaskDefinition(ctx, svc, servicesMap, tdRes.TaskDefinition)
 	if err != nil {
 		return fmt.Errorf("failed to compare task definitions: %w", err)
 	}
 	if !r.TdOnly {
-		err := updateService(svc, taskConfList, diffMap, *tdRes.TaskDefinition.TaskDefinitionArn)
+		err := updateService(ctx, svc, taskConfList, diffMap, *tdRes.TaskDefinition.TaskDefinitionArn)
 		if err != nil {
 			return err
 		}
@@ -120,14 +125,14 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	return nil
 }
 
-func diffTaskDefinition(svc *ecs.Client, servicesMap map[string][]string, newTd *ecs.TaskDefinition) (map[string]string, error) {
+func diffTaskDefinition(ctx context.Context, svc *ecs.Client, servicesMap map[string][]string, newTd *types.TaskDefinition) (map[string]string, error) {
 	diffMap := map[string]string{}
 
 	for cluster, services := range servicesMap {
-		svcRes, err := svc.DescribeServicesRequest(&ecs.DescribeServicesInput{
+		svcRes, err := svc.DescribeServices(ctx, &ecs.DescribeServicesInput{
 			Cluster:  &cluster,
 			Services: services,
-		}).Send(context.Background())
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -145,15 +150,15 @@ func diffTaskDefinition(svc *ecs.Client, servicesMap map[string][]string, newTd 
 			if !ok {
 				return nil, fmt.Errorf("service %s is not found in cluster %s", s, cluster)
 			}
-			currentTdRes, err := svc.DescribeTaskDefinitionRequest(&ecs.DescribeTaskDefinitionInput{
+			currentTdRes, err := svc.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 				TaskDefinition: &td,
-			}).Send(context.Background())
+			})
 			if err != nil {
 				return nil, fmt.Errorf("failed to get current task definition: %w", err)
 			}
 			currentTdRes.TaskDefinition.Revision = newTd.Revision
 			currentTdRes.TaskDefinition.TaskDefinitionArn = newTd.TaskDefinitionArn
-			diff := cmp.Diff(currentTdRes.TaskDefinition, newTd)
+			diff := cmp.Diff(currentTdRes.TaskDefinition, newTd, cmpopts.IgnoreTypes(document.NoSerde{}), cmpopts.IgnoreFields(*newTd, "RegisteredAt"))
 			diffMap[s] = diff
 			if diff == "" {
 				fmt.Println("Already up-to-date")
@@ -167,7 +172,7 @@ func diffTaskDefinition(svc *ecs.Client, servicesMap map[string][]string, newTd 
 	return diffMap, nil
 }
 
-func updateService(svc *ecs.Client, taskConfList []config.TaskConfig, diffMap map[string]string, tdArn string) error {
+func updateService(ctx context.Context, svc *ecs.Client, taskConfList []config.TaskConfig, diffMap map[string]string, tdArn string) error {
 	var failedServiceList []string
 	for _, taskConf := range taskConfList {
 		if diffMap[taskConf.Service] == "" {
@@ -180,7 +185,7 @@ func updateService(svc *ecs.Client, taskConfList []config.TaskConfig, diffMap ma
 			Service:        &taskConf.Service,
 			TaskDefinition: &tdArn,
 		}
-		_, err := svc.UpdateServiceRequest(serviceInput).Send(context.Background())
+		_, err := svc.UpdateService(ctx, serviceInput)
 		if err != nil {
 			logrus.Errorf("failed to update service: %s", err)
 			failedServiceList = append(failedServiceList, "[cluster: "+taskConf.Cluster+", service: "+taskConf.Service+"]")

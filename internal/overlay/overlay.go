@@ -11,10 +11,10 @@ import (
 	"text/template"
 
 	"github.com/sirupsen/logrus"
-
-	"github.com/kazz187/fargate-td/internal/util"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 	"sigs.k8s.io/kustomize/kyaml/yaml/merge2"
+
+	"github.com/kazz187/fargate-td/internal/util"
 )
 
 const tplSuffix = ".tpl"
@@ -90,7 +90,7 @@ func mergeStringYaml(srcStr string, dst *yaml.RNode) (*yaml.RNode, error) {
 			return nil, fmt.Errorf("can't parse string as yaml: %w", err)
 		}
 	}
-	return merge2.Merge(src, dst)
+	return merge2.Merge(src, dst, yaml.MergeOptions{})
 }
 
 func (l *Loader) searchTargetFiles(targetName string, isTplMode bool) []string {

@@ -27,11 +27,11 @@ func (cl *ContainerLoader) LoadContainer(name string, taskConVars *yaml.RNode) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to load variables %s: %w", name, err)
 	}
-	tplVars, err := merge2.Merge(cl.TaskVars, containerVars)
+	tplVars, err := merge2.Merge(cl.TaskVars, containerVars, yaml.MergeOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to merge variables %s: %w", name, err)
 	}
-	tplVars, err = merge2.Merge(taskConVars, tplVars)
+	tplVars, err = merge2.Merge(taskConVars, tplVars, yaml.MergeOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to merge variables %s: %w", name, err)
 	}
