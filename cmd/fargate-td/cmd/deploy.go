@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchevents"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/smithy-go/document"
@@ -74,8 +75,6 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	taskConfList := deployConf.GetTaskConfigs(r.TaskName)
-	servicesMap := deployConf.GetServicesMapGroupByCluster(r.TaskName)
 
 	// Generate task definition
 	taskStr, err := r.GenerateRunner.GenerateTaskDefinition()
@@ -107,25 +106,34 @@ func (r *DeployRunner) runE(c *cobra.Command, args []string) error {
 	}
 
 	//
-	svc := ecs.NewFromConfig(cfg)
-	tdRes, err := svc.RegisterTaskDefinition(ctx, in)
+	ecsSvc := ecs.NewFromConfig(cfg)
+	cweSvc := cloudwatchevents.NewFromConfig(cfg)
+	tdRes, err := ecsSvc.RegisterTaskDefinition(ctx, in)
 	if err != nil {
 		return fmt.Errorf("failed to register task definition: %w", err)
 	}
-	diffMap, err := diffTaskDefinition(ctx, svc, servicesMap, tdRes.TaskDefinition)
+	servicesMap := deployConf.GetServicesMapGroupByCluster(r.TaskName)
+	serviceDiffMap, err := diffServiceTaskDefinition(ctx, ecsSvc, servicesMap, tdRes.TaskDefinition)
 	if err != nil {
 		return fmt.Errorf("failed to compare task definitions: %w", err)
 	}
+	cronJobs := deployConf.GetCronJobTaskConfigs(r.TaskName)
+	cronJobDiffMap, err := diffCronJobTaskDefinition(ctx, ecsSvc, cweSvc, cronJobs, tdRes.TaskDefinition)
 	if !r.TdOnly {
-		err := updateService(ctx, svc, taskConfList, diffMap, *tdRes.TaskDefinition.TaskDefinitionArn)
-		if err != nil {
+		serviceTaskConfig := deployConf.GetServiceTaskConfigs(r.TaskName)
+		if err := updateService(ctx, ecsSvc, serviceTaskConfig, serviceDiffMap, *tdRes.TaskDefinition.TaskDefinitionArn); err != nil {
+			return err
+		}
+
+		cronJobTaskConfig := deployConf.GetCronJobTaskConfigs(r.TaskName)
+		if err := updateCronJob(ctx, cweSvc, cronJobTaskConfig, cronJobDiffMap, *tdRes.TaskDefinition.TaskDefinitionArn); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func diffTaskDefinition(ctx context.Context, svc *ecs.Client, servicesMap map[string][]string, newTd *types.TaskDefinition) (map[string]string, error) {
+func diffServiceTaskDefinition(ctx context.Context, svc *ecs.Client, servicesMap map[string][]string, newTd *types.TaskDefinition) (map[string]string, error) {
 	diffMap := map[string]string{}
 
 	for cluster, services := range servicesMap {
@@ -172,7 +180,51 @@ func diffTaskDefinition(ctx context.Context, svc *ecs.Client, servicesMap map[st
 	return diffMap, nil
 }
 
-func updateService(ctx context.Context, svc *ecs.Client, taskConfList []config.TaskConfig, diffMap map[string]string, tdArn string) error {
+func diffCronJobTaskDefinition(ctx context.Context, ecsSvc *ecs.Client, cweSvc *cloudwatchevents.Client, cronJobs []config.CronJobTaskConfig, newTd *types.TaskDefinition) (map[string]string, error) {
+	diffMap := map[string]string{}
+
+	for _, job := range cronJobs {
+		fmt.Printf("Diff [cluster: %s, cronJob: %s]\n", job.Cluster, job.CronJob)
+		rule, err := cweSvc.DescribeRule(ctx, &cloudwatchevents.DescribeRuleInput{
+			Name: &job.CronJob,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get rule: %w", err)
+		}
+		targets, err := cweSvc.ListTargetsByRule(ctx, &cloudwatchevents.ListTargetsByRuleInput{
+			Rule: rule.Name,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get targets: %w", err)
+		}
+		for _, target := range targets.Targets {
+			if target.EcsParameters == nil {
+				continue
+			}
+			tdArn := target.EcsParameters.TaskDefinitionArn
+			currentTd, err := ecsSvc.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
+				TaskDefinition: tdArn,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to get task definition: %w", err)
+			}
+			currentTd.TaskDefinition.Revision = newTd.Revision
+			currentTd.TaskDefinition.TaskDefinitionArn = newTd.TaskDefinitionArn
+			diff := cmp.Diff(currentTd.TaskDefinition, newTd, cmpopts.IgnoreTypes(document.NoSerde{}), cmpopts.IgnoreFields(*newTd, "RegisteredAt"))
+			diffMap[*target.Id] = diff
+			if diff == "" {
+				fmt.Println("Already up-to-date")
+			} else {
+				fmt.Println("```")
+				displayColorDiff(diff)
+				fmt.Println("```")
+			}
+		}
+	}
+	return diffMap, nil
+}
+
+func updateService(ctx context.Context, svc *ecs.Client, taskConfList []config.ServiceTaskConfig, diffMap map[string]string, tdArn string) error {
 	var failedServiceList []string
 	for _, taskConf := range taskConfList {
 		if diffMap[taskConf.Service] == "" {
@@ -185,14 +237,77 @@ func updateService(ctx context.Context, svc *ecs.Client, taskConfList []config.T
 			Service:        &taskConf.Service,
 			TaskDefinition: &tdArn,
 		}
-		_, err := svc.UpdateService(ctx, serviceInput)
-		if err != nil {
+		if _, err := svc.UpdateService(ctx, serviceInput); err != nil {
 			logrus.Errorf("failed to update service: %s", err)
 			failedServiceList = append(failedServiceList, "[cluster: "+taskConf.Cluster+", service: "+taskConf.Service+"]")
 		}
 	}
 	if len(failedServiceList) != 0 {
 		return fmt.Errorf("failed to update services: %s", strings.Join(failedServiceList, ", "))
+	}
+	return nil
+}
+
+func updateCronJob(ctx context.Context, cweSvc *cloudwatchevents.Client, taskConfList []config.CronJobTaskConfig, diffMap map[string]string, tdArn string) error {
+	var failedCronJobList []string
+	for _, taskConf := range taskConfList {
+		ruleInput := cloudwatchevents.DescribeRuleInput{
+			Name:         &taskConf.CronJob,
+			EventBusName: nil,
+		}
+		rule, err := cweSvc.DescribeRule(ctx, &ruleInput)
+		if err != nil {
+			logrus.Errorf("failed to get cron rule: %s", err)
+			failedCronJobList = append(failedCronJobList, "[cluster: "+taskConf.Cluster+", cron job: "+taskConf.CronJob+"]")
+			continue
+		}
+		if *rule.ScheduleExpression != taskConf.Cron {
+			cronJobInput := &cloudwatchevents.PutRuleInput{
+				Name:               &taskConf.CronJob,
+				ScheduleExpression: &taskConf.Cron,
+			}
+			fmt.Printf("Update cron schedule [%s -> %s]\n", *rule.ScheduleExpression, taskConf.Cron)
+			if _, err := cweSvc.PutRule(ctx, cronJobInput); err != nil {
+				logrus.Errorf("failed to update cron job: %s", err)
+				failedCronJobList = append(failedCronJobList, "[cluster: "+taskConf.Cluster+", cron job: "+taskConf.CronJob+", cron: "+taskConf.Cron+"]")
+			}
+		}
+
+		if diffMap[taskConf.CronJob] == "" {
+			fmt.Printf("Skip update cron job [cluster: %s, cronJob: %s]\n", taskConf.Cluster, taskConf.CronJob)
+			continue
+		}
+
+		listTargetsIn := cloudwatchevents.ListTargetsByRuleInput{
+			Rule: rule.Name,
+		}
+		targets, err := cweSvc.ListTargetsByRule(ctx, &listTargetsIn)
+		if err != nil {
+			logrus.Errorf("failed to get targets: %s", err)
+			failedCronJobList = append(failedCronJobList, "[cluster: "+taskConf.Cluster+", cron job: "+taskConf.CronJob+"]")
+			continue
+		}
+		for i, target := range targets.Targets {
+			if target.EcsParameters == nil {
+				continue
+			}
+			if *target.EcsParameters.TaskDefinitionArn == tdArn {
+				continue
+			}
+			fmt.Printf("Update cron job [cluster: %s, cronJob: %s, cron: %s]\n", taskConf.Cluster, taskConf.CronJob, taskConf.Cron)
+			targets.Targets[i].EcsParameters.TaskDefinitionArn = &tdArn
+		}
+		putTargetsIn := &cloudwatchevents.PutTargetsInput{
+			Rule:    &taskConf.CronJob,
+			Targets: targets.Targets,
+		}
+		if _, err := cweSvc.PutTargets(ctx, putTargetsIn); err != nil {
+			logrus.Errorf("failed to update target: %s", err)
+			failedCronJobList = append(failedCronJobList, "[cluster: "+taskConf.Cluster+", cron job: "+taskConf.CronJob+"]")
+		}
+	}
+	if len(failedCronJobList) != 0 {
+		return fmt.Errorf("failed to update cron jobs: %s", strings.Join(failedCronJobList, ", "))
 	}
 	return nil
 }

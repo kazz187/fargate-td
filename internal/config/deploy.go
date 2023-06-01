@@ -2,20 +2,28 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 
-	"github.com/kazz187/fargate-td/internal/util"
 	"gopkg.in/yaml.v3"
+
+	"github.com/kazz187/fargate-td/internal/util"
 )
 
 type DeployConfig struct {
-	taskConfigs map[string][]TaskConfig
+	serviceTaskConfig map[string][]ServiceTaskConfig
+	cronJobTaskConfig map[string][]CronJobTaskConfig
 }
 
-type TaskConfig struct {
+type ServiceTaskConfig struct {
 	Cluster string
 	Service string
+}
+
+type CronJobTaskConfig struct {
+	Cluster string
+	CronJob string
+	Cron    string
 }
 
 type config struct {
@@ -25,6 +33,7 @@ type config struct {
 type cluster struct {
 	Name     string    `yaml:"name"`
 	Services []service `yaml:"services"`
+	CronJobs []cronJob `yaml:"cronJobs"`
 }
 
 type service struct {
@@ -32,15 +41,22 @@ type service struct {
 	Task string `yaml:"task"`
 }
 
+type cronJob struct {
+	Name string `yaml:"name"`
+	Task string `yaml:"task"`
+	Cron string `yaml:"cron"`
+}
+
 func NewDeployConfig() *DeployConfig {
 	return &DeployConfig{
-		taskConfigs: map[string][]TaskConfig{},
+		serviceTaskConfig: map[string][]ServiceTaskConfig{},
+		cronJobTaskConfig: map[string][]CronJobTaskConfig{},
 	}
 }
 
 func (dc *DeployConfig) Load(searchPath string) error {
 	configFile, err := searchConfigFile(searchPath)
-	f, err := ioutil.ReadFile(configFile)
+	f, err := os.ReadFile(configFile)
 	if err != nil {
 		return fmt.Errorf("failed to read deploy config file %s: %w", configFile, err)
 	}
@@ -51,15 +67,27 @@ func (dc *DeployConfig) Load(searchPath string) error {
 	}
 	for _, c := range conf.Clusters {
 		for _, s := range c.Services {
-			taskConfigList, ok := dc.taskConfigs[s.Task]
+			taskConfigList, ok := dc.serviceTaskConfig[s.Task]
 			if !ok {
-				taskConfigList = []TaskConfig{}
+				taskConfigList = []ServiceTaskConfig{}
 			}
-			taskConfigList = append(taskConfigList, TaskConfig{
+			taskConfigList = append(taskConfigList, ServiceTaskConfig{
 				Cluster: c.Name,
 				Service: s.Name,
 			})
-			dc.taskConfigs[s.Task] = taskConfigList
+			dc.serviceTaskConfig[s.Task] = taskConfigList
+		}
+		for _, cj := range c.CronJobs {
+			taskConfigList, ok := dc.cronJobTaskConfig[cj.Task]
+			if !ok {
+				taskConfigList = []CronJobTaskConfig{}
+			}
+			taskConfigList = append(taskConfigList, CronJobTaskConfig{
+				Cluster: c.Name,
+				CronJob: cj.Name,
+				Cron:    cj.Cron,
+			})
+			dc.cronJobTaskConfig[cj.Task] = taskConfigList
 		}
 	}
 	return nil
@@ -79,14 +107,26 @@ func searchConfigFile(searchPath string) (string, error) {
 	return "", fmt.Errorf("deploy config file is not found in %s", filepath.Clean(searchPath))
 }
 
-func (dc *DeployConfig) GetTaskConfigs(task string) []TaskConfig {
-	return dc.taskConfigs[task]
+func (dc *DeployConfig) GetServiceTaskConfigs(task string) []ServiceTaskConfig {
+	stc, ok := dc.serviceTaskConfig[task]
+	if !ok {
+		return []ServiceTaskConfig{}
+	}
+	return stc
+}
+
+func (dc *DeployConfig) GetCronJobTaskConfigs(task string) []CronJobTaskConfig {
+	cjtc, ok := dc.cronJobTaskConfig[task]
+	if !ok {
+		return []CronJobTaskConfig{}
+	}
+	return cjtc
 }
 
 func (dc *DeployConfig) GetServicesMapGroupByCluster(task string) map[string][]string {
-	taskConfList := dc.taskConfigs[task]
+	serviceTaskConfList := dc.serviceTaskConfig[task]
 	clusters := map[string][]string{}
-	for _, taskConf := range taskConfList {
+	for _, taskConf := range serviceTaskConfList {
 		c, ok := clusters[taskConf.Cluster]
 		if ok {
 			clusters[taskConf.Cluster] = append(c, taskConf.Service)
