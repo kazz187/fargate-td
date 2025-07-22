@@ -39,7 +39,7 @@ jobs:
       - name: Update Homebrew formula
         env:
           GITHUB_USER: ${{ github.repository_owner }}
-          HOMEBREW_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
           TAG: ${{ github.ref_name }}
           SHA256: ${{ steps.checksums.outputs.sha256 }}
           SHA256ARM: ${{ steps.checksums.outputs.sha256arm }}
