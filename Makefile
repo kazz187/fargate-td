@@ -31,7 +31,7 @@ homebrew-release:
 	git config --global user.email "kazzone87@gmail.com"
 	git config --global user.name "kazzbot"
 	mkdir -p ${BUILD_DIR}/brew
-	git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/kazz187/homebrew-fargate-td ${BUILD_DIR}/brew/homebrew-fargate-td
+	git clone https://${GITHUB_USER}:${HOMEBREW_TOKEN}@github.com/kazz187/homebrew-fargate-td ${BUILD_DIR}/brew/homebrew-fargate-td
 	pushd ${BUILD_DIR}/brew/homebrew-fargate-td && ./update.sh ${TAG} ${SHA256} ${SHA256ARM} && git commit -a -m"Update fargate-td ${TAG}" && git push origin master && popd
 
 .PHONY: clean
